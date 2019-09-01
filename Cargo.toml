@@ -1,0 +1,49 @@
+[package]
+name = "epd24rwb"
+version = "0.1.0"
+authors = ["Sascha Smolkov <sascha.smolkov@gmail.com>"]
+edition = "2018"
+description = "Epaper display dashboard for linux"
+keywords = ["api", "monitor", "server"]
+categories = ["linux", "automatisation", "greenhaus"]
+repository = "https://github.com/greenhaus/epd24rbw"
+readme = "README.md"
+license = "Apache-2.0 OR MIT"
+# Is it maintained resolution time: `repository` is required.
+# is-it-maintained-issue-resolution = { repository = "https://todo.sr.ht/~asmolkov/wqa" }
+# Is it maintained percentage of open issues: `repository` is required.
+# is-it-maintained-open-issues = { repository = "https://todo.sr.ht/~asmolkov/wqa" }
+
+
+
+[badges]
+maintenance = { status = "experimental" }
+travis-ci = { repository = "greenhaus/epd24rbw", branch = "master"}
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+failure = "0.1.5"
+# log
+log = "0.4.8"
+async-log = "2.0.0"
+# bigdecimal = { version = "0.1.0", features = ["serde"] }
+env_logger = "0.6.2"
+# Serializer file format
+serde_json = "1.0.40"
+serde = { version = "1.0.99", features = ["derive"] }
+
+paw = "1.0.0"
+structopt = { version = "0.3.0", features = ["paw"] }
+#Time date
+chrono = "0.4.7"
+
+embedded-graphics = "0.4.4"
+ssd1675 = "*"
+lazy_static = "1.4.0"
+qrcode = "0.11.0"
+rppal = "0.11.3"
+profont = "0.2.0"
+linux-embedded-hal = "0.2.2"
+async-std = "0.99.4"

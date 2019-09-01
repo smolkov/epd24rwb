@@ -1,0 +1,11 @@
+/target
+**/target
+**/*.rs.bk
+Cargo.lock
+example
+example-*
+.example
+.recherche
+.wscode
+.example-*
+.col

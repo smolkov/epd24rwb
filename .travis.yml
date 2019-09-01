@@ -1,0 +1,42 @@
+language: rust
+rust: nightly
+cache: cargo
+
+
+matrix:
+  include:
+    - name: "Rust Test"
+      os: linux
+      dist: xenial
+      script:
+        - rustup component add rustfmt
+        - rustup component add rust-src
+        - cargo test --no-run  # let's measure compile time separately
+        - cargo test
+    - name: "Rust Docs"
+      os: linux
+      if: branch = master AND type = push
+      before_script:
+        - DEPLOY_DOCS=1
+      language: rust
+      rust: nightly
+      script:
+        - cargo doc --all --no-deps
+      env:
+        - RUSTFLAGS="-D warnings", CARGO_INCREMENTAL=0
+    - name: "Rust build"
+      os: linux
+      dist: xenial
+      script:
+        - cargo build --verbose
+
+deploy:
+  - provider: pages
+    skip-cleanup: true
+    github-token: $GITHUB_TOKEN  # Set in the settings page of your repository, as a secure variable
+    keep-history: true
+    local-dir: target/doc
+    branch: gh-pages
+    on:
+      branch: master
+      condition: $DEPLOY_DOCS = 1

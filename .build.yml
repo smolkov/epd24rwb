@@ -1,0 +1,24 @@
+image: archlinux
+packages:
+    - rustup
+sources:
+    - https://git.sr.ht/~asmolkov/epd24rwb
+tasks:
+    - setup: |
+        rustup toolchain install nightly stable
+        cd wqa/
+        rustup run nightly cargo fetch
+    - stable: |
+        rustup default nightly
+        cd wqa/
+        cargo build --verbose
+        cargo test --verbose
+    - nightly: |
+        rustup default nightly
+        cd wqa/
+        cargo build --verbose ||:
+        cargo test --verbose  ||:
+    - docs: |
+        cd wqa/
+        rustup run stable cargo doc --no-deps
+        rustup run nightly cargo doc --no-deps ||:

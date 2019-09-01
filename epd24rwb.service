@@ -1,0 +1,14 @@
+[Unit]
+Description=Conference Badge
+After=network.target
+
+[Service]
+WorkingDirectory=~
+ExecStart=/home/pi/epd24rwb
+Restart=always
+RestartSec=5
+User=pi
+Group=pi
+
+[Install]
+WantedBy=multi-user.target
