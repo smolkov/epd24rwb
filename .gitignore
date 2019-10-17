@@ -1,2 +1,7 @@
-/target
 **/*.rs.bk
+.#*
+Cargo.lock
+target/
+example*
+.gitsecret/keys/random_seed
+.example*

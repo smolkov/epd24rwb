@@ -1,5 +1,4 @@
-#![feature(async_await)]
-
+///
 pub mod config;
 
 use async_std::prelude::*;
@@ -10,7 +9,7 @@ use std::time::Duration;
 
 // use config::Config;
 // use super::rpinky;
-/// Linux 
+/// Linux
 use linux_embedded_hal::spidev::{self, SpidevOptions};
 use linux_embedded_hal::sysfs_gpio::Direction;
 use linux_embedded_hal::Delay;
@@ -33,7 +32,13 @@ use profont::{ProFont12Point, ProFont14Point, ProFont24Point, ProFont9Point};
 use std::process::Command;
 // use std::{fs, io};
 
-
+use futures::{
+    channel::mpsc,
+    SinkExt,
+    FutureExt,
+    select,
+};
+use std::path::PathBuf;
 
 // Activate SPI, GPIO in raspi-config needs to be run with sudo because of some sysfs_gpio
 // permission problems and follow-up timing problems
@@ -63,10 +68,30 @@ const LUT: [u8; 70] = [
     0,    0,    0,    0,     0    // 6
 ];
 
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
 
 
-pub async fn start() -> io::Result<()> {  
-    // Configure SPI
+pub enum Event{
+    UpdatePage(PathBuf),
+    Message(String),
+}
+
+pub type Sender<T> = mpsc::UnboundedSender<T>;
+pub type Receiver<T> = mpsc::UnboundedReceiver<T>;
+
+type EpdDisplay<'a> = ssd1675::display::Display<
+        'a,
+        ssd1675::interface::Interface<
+            linux_embedded_hal::Spidev,
+            linux_embedded_hal::Pin,
+            linux_embedded_hal::Pin,
+            linux_embedded_hal::Pin,
+            linux_embedded_hal::Pin,
+        >,
+    >;
+
+pub async fn draw(mut events: Receiver<Event>,msg: Receiver<String>) -> io::Result<()> {
+
     let mut spi = Spidev::open("/dev/spidev0.0").expect("SPI device");
     let options = SpidevOptions::new()
         .bits_per_word(8)
@@ -80,7 +105,7 @@ pub async fn start() -> io::Result<()> {
     let cs = Pin::new(8); // BCM8
     cs.export().expect("cs export");
     while !cs.is_exported() {}
-    cs.set_direction(Direction::Out).expect("CS Direction");
+    cs.set_direction(Direction::Out).expect("cs Direction");
     cs.set_value(1).expect("CS Value set to 1");
 
     let busy = Pin::new(17); // BCM17
@@ -121,148 +146,109 @@ pub async fn start() -> io::Result<()> {
         .expect("invalid configuration");
     let display = Display::new(controller, config);
     let mut display = GraphicDisplay::new(display, &mut black_buffer, &mut red_buffer);
+    let page_update = async {
 
+    };
     // Main loop. Displays CPU temperature, uname, and uptime every minute with a red Raspberry Pi
     // header.
+
     loop {
-        display.reset(&mut delay).expect("error resetting display");
+        let event = select! {
+            event = events.next().fuse() => match event {
+                None => break,
+                Some(event) => event,
+            },
+
+        };
+
+
+           display.reset(&mut delay).unwrap();
         println!("Reset and initialised");
-        let one_minute = Duration::from_secs(60);
 
         display.clear(Color::White);
         println!("Clear");
-
         display.draw(
-            ProFont24Point::render_str("Irrigatron")
-                .with_stroke(Some(Color::Red))
+        ProFont9Point::render_str(&format!("version:{}",VERSION))
+            .with_stroke(Some(Color::Black))
+            .with_fill(Some(Color::White))
+            .translate(Coord::new(90, -2))
+            .into_iter(),
+    );
+    display.draw(
+        ProFont24Point::render_str("Irrigatron")
+            .with_stroke(Some(Color::Red))
+            .with_fill(Some(Color::White))
+            .translate(Coord::new(1,0))
+            .into_iter(),
+        );
+
+    if let Ok(cpu_temp) = read_cpu_temp().await {
+        display.draw(
+        ProFont14Point::render_str("CPU Temp:")
+            .with_stroke(Some(Color::Black))
+            .with_fill(Some(Color::White))
+            .translate(Coord::new(1, 30))
+            .into_iter(),
+        );
+        display.draw(
+            ProFont12Point::render_str(&format!("{:.1}°C", cpu_temp))
+                .with_stroke(Some(Color::Black))
                 .with_fill(Some(Color::White))
-                .translate(Coord::new(1, -4))
+                .translate(Coord::new(95, 34))
                 .into_iter(),
         );
-    
-        if let Ok(cpu_temp) = read_cpu_temp().await {
-            display.draw(
-                ProFont14Point::render_str("CPU Temp:")
-                    .with_stroke(Some(Color::Black))
-                    .with_fill(Some(Color::White))
-                    .translate(Coord::new(1, 30))
-                    .into_iter(),
-            );
-            display.draw(
-                ProFont12Point::render_str(&format!("{:.1}°C", cpu_temp))
-                    .with_stroke(Some(Color::Black))
-                    .with_fill(Some(Color::White))
-                    .translate(Coord::new(95, 34))
-                    .into_iter(),
-            );
+    }
+    match event {
+        Event::UpdatePage(path)=> {
         }
-
-        if let Some(uptime) = read_uptime() {
+        Event::Message(msg) => {
             display.draw(
-                ProFont9Point::render_str(uptime.trim())
-                    .with_stroke(Some(Color::Black))
-                    .with_fill(Some(Color::White))
-                    .translate(Coord::new(1, 93))
-                    .into_iter(),
-            );
+                ProFont9Point::render_str(msg.trim())
+                .with_stroke(Some(Color::Red))
+                .with_fill(Some(Color::White))
+                .translate(Coord::new(1, 45))
+                .into_iter(),
+        );
         }
+    }
+    if let Some(uptime) = read_uptime() {
+        display.draw(
+            ProFont9Point::render_str(uptime.trim())
+                .with_stroke(Some(Color::Black))
+                .with_fill(Some(Color::White))
+                .translate(Coord::new(1, 93))
+                .into_iter(),
+        );
+    }
 
         if let Some(uname) = read_uname() {
             display.draw(
                 ProFont9Point::render_str(uname.trim())
-                    .with_stroke(Some(Color::Black))
-                    .with_fill(Some(Color::White))
-                    .translate(Coord::new(1, 84))
-                    .into_iter(),
+                .with_stroke(Some(Color::Black))
+                .with_fill(Some(Color::White))
+                .translate(Coord::new(1, 84))
+                .into_iter(),
             );
         }
-
-        display.update(&mut delay).expect("error updating display");
         println!("Update...");
-
-        println!("Finished - going to sleep");
-        display.deep_sleep()?;
-
-        task::sleep(Duration::from_secs(1)).await;
-        display.reset(&mut delay).expect("error resetting display");
-        println!("Szene2");
-        let one_minute = Duration::from_secs(60);
-
-        display.clear(Color::White);
-        println!("Agni pagni");
-
-        display.draw(
-            ProFont14Point::render_str("Liebe Agni-Pagni")
-                .with_stroke(Some(Color::Red))
-                .with_fill(Some(Color::White))
-                .translate(Coord::new(1, -4))
-                .into_iter(),
-        );
-        display.draw(
-            ProFont14Point::render_str("zum Geburtstag")
-                .with_stroke(Some(Color::Red))
-                .with_fill(Some(Color::White))
-                .translate(Coord::new(1, 13))
-                .into_iter(),
-        );
-        display.draw(
-        ProFont14Point::render_str("wir wünschen dir")
-                    .with_stroke(Some(Color::Red))
-                    .with_fill(Some(Color::White))
-                    .translate(Coord::new(1, 27))
-                    .into_iter(),
-            );
-        display.draw(
-        ProFont12Point::render_str("alles Gute und viel Glück")
-                    .with_stroke(Some(Color::Red))
-                    .with_fill(Some(Color::White))
-                    .translate(Coord::new(1, 42))
-                    .into_iter(),
-            );
-        display.draw(
-                ProFont9Point::render_str("Irrigatron bittet dir seine Dinst")
-                    .with_stroke(Some(Color::Black))
-                    .with_fill(Some(Color::White))
-                    .translate(Coord::new(1, 57))
-                    .into_iter(),
-            );
-        display.draw(
-            ProFont9Point::render_str("Geburehfreie und treu")
-                .with_stroke(Some(Color::Black))
-                .with_fill(Some(Color::White))
-                .translate(Coord::new(1, 66))
-                .into_iter(),
-        );
-        display.draw(
-            ProFont9Point::render_str("arbeitet auf deine auf Plantagen")
-                .with_stroke(Some(Color::Black))
-                .with_fill(Some(Color::White))
-                .translate(Coord::new(1, 76))
-                .into_iter(),
-        );
-        display.draw(
-            ProFont9Point::render_str("Unkompliziert und gute Zuhorer,")
-                .with_stroke(Some(Color::Black))
-                .with_fill(Some(Color::White))
-                .translate(Coord::new(1, 85))
-                .into_iter(),
-        );
-        display.draw(
-            ProFont9Point::render_str("Kostonlose Updates und Nachrustung")
-                .with_stroke(Some(Color::Red))
-                .with_fill(Some(Color::White))
-                .translate(Coord::new(1, 94))
-                .into_iter(),
-        );
-         
         display.update(&mut delay).expect("error updating display");
-        println!("Update...");
-
         println!("Finished - going to sleep");
-        display.deep_sleep()?;
-
-        task::sleep(one_minute);
+        display.deep_sleep().unwrap();
     }
+    Ok(())
+}
+
+pub async fn start(config:config::Config,msg: Receiver<String> ) -> io::Result<()> {
+    // Configure SPI
+    let (mut sender, receiver) = mpsc::unbounded();
+    let  draw= task::spawn(draw(receiver,msg));
+    let interval = Duration::from_secs(60);
+    loop{
+        let mut event = Event::UpdatePage(PathBuf::from("./dashboard.page"));
+        sender.send(event).await;
+        task::sleep(interval).await;
+    }
+    // drop(sender);
 }
 
 async fn read_cpu_temp() -> io::Result<f64> {

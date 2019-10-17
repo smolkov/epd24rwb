@@ -1,6 +1,6 @@
-# irrigatron
+# Dashboar 2.4 inky-phat
 
-**😀 Der Herscher uber die Herscher und die Pumpe.Der Herr des Wasser.Erfolgsreicher Geschaftsman**
+**😀 Die Anzeige in drei Farben **
 
 - `water`
 - `pump`
